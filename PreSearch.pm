@@ -1,7 +1,7 @@
 ##
 # PreSearch module for ZNC IRC Bouncer
 # Author: m4luc0
-# Version: 1.0
+# Version: 1.1
 ##
 
 package PreSearch;
@@ -13,11 +13,11 @@ use experimental 'smartmatch';   # smartmatch (Regex) support for newer perl ver
 use IRC::Utils qw(NORMAL BOLD UNDERLINE REVERSE ITALIC FIXED WHITE BLACK BLUE GREEN RED BROWN PURPLE ORANGE YELLOW LIGHT_GREEN TEAL LIGHT_CYAN LIGHT_BLUE PINK GREY LIGHT_GREY); # Support for IRC colors and formatting
 
 # (My)SQL settings
-my $DB_NAME     = 'dbname';       # DB name
-my $DB_TABLE    = 'tablename';    # TABLE name
+my $DB_NAME     = 'dbname';      # DB name
+my $DB_TABLE    = 'tablename';   # TABLE name
 my $DB_HOST     = 'localhost';   # DB host
-my $DB_USER     = 'dbuser';  # DB user
-my $DB_PASSWD   = 'userpw'; # DB user passwd
+my $DB_USER     = 'dbuser';      # DB user
+my $DB_PASSWD   = 'userpw';      # DB user passwd
 
 # DB Columns
 my $COL_PRETIME = 'pretime';     # pre timestamp
@@ -83,6 +83,18 @@ sub OnPrivMsg {
 
             # Search foo dupes
             $self->newest($nick, $1);
+
+        # !top
+        } elsif ($cmd eq "!top") {
+            $match = $message ~~ m/^!\w+\s(.*)/;
+
+            # Get All-Time top groups
+            if (!$match) {
+                $self->topGroups($nick);
+            # Get top groups by section
+            } else {
+                $self->topSectionGroups($nick, $1);
+            }
 
         # !help
         } elsif($cmd eq "!help") {
@@ -304,7 +316,6 @@ sub group {
 
 ##
 # !new section
-# !day, !week, !month, !year
 ##
 
 # Show the newest releases of a section.
@@ -373,6 +384,103 @@ sub newest {
         }
     } else  {
         $self->sendMessage($nick, BOLD."Sorry!".NORMAL." Found nothing about '".BOLD.UNDERLINE.$param.NORMAL."'");
+    }
+
+    # Finish query
+    $query->finish();
+
+    # Disconnect Database
+    $dbh->disconnect();
+}
+
+##
+# !top
+# !top section 
+##
+
+# Shows the alltime top10 groups
+# Param (nick)
+sub topGroups {
+    my $self = shift;
+    my $nick = $_[0];
+
+    # Connect to Database
+    my $dbh = DBI->connect("DBI:mysql:database=$DB_NAME;host=$DB_HOST", $DB_USER, $DB_PASSWD)
+        or die "Couldn't connect to database: " . DBI->errstr;
+
+    # Prepare Query -> Get top5 groups
+    my $query = $dbh->prepare("SELECT COUNT(`".$COL_RELEASE."`) as `rls`, `".$COL_GROUP."` FROM  `".$DB_TABLE."` WHERE `".$COL_GROUP."` NOT LIKE '' GROUP BY `".$COL_GROUP."` ORDER BY `rls` DESC LIMIT 10;");
+
+    # Execute Query
+    $query->execute() or die $dbh->errstr;
+
+    # Get results
+    my $rows = $query->rows();
+    if ($rows > 0) {
+        $self->sendMessage($nick, "These are the All-Time Top 10 groups:");
+
+        my $i = 0;
+        while ($i < $rows) {
+            my ($group_count, $group) = $query->fetchrow();
+            # 1. GROUP - 12345 rls
+            $self->sendMessage($nick, GREY.($i+1).".".ORANGE." ".$group.NORMAL." - ".GREEN.$group_count.NORMAL." rls");
+            $i++; 
+        }
+    } else {    
+        $self->sendMessage($nick, BOLD."Sorry!".NORMAL." No ranking found, PreDB must be empty.");
+    }
+
+    # Finish query
+    $query->finish();
+
+    # Disconnect Database
+    $dbh->disconnect();
+}
+
+# Shows the alltime top5 groups of a section
+# Param (nick, section)
+sub topSectionGroups {
+    my $self = shift;
+    my ($nick, $param) = @_;
+    my $sec = "%".$param."%";
+
+    # Replace whitespaces with % (for the SQL search query)
+    if ($sec ~~ m/\s+/) {
+        $sec =~ s/\s/%/g;
+    }
+
+    # Connect to Database
+    my $dbh = DBI->connect("DBI:mysql:database=$DB_NAME;host=$DB_HOST", $DB_USER, $DB_PASSWD)
+        or die "Couldn't connect to database: " . DBI->errstr;
+
+    # Prepare Query -> Get top5 groups
+    my $query = $dbh->prepare("SELECT COUNT(`".$COL_RELEASE."`) as `rls`, `".$COL_GROUP."` FROM  `".$DB_TABLE."` WHERE LOWER(`".$COL_SECTION."`) LIKE LOWER( ? ) AND `".$COL_GROUP."` NOT LIKE '' GROUP BY `".$COL_GROUP."` ORDER BY `rls` DESC LIMIT 5;");
+
+    # Execute Query
+    $query->execute($sec) or die $dbh->errstr;
+
+    # Get results
+    my $rows = $query->rows();
+    if ($rows > 0) {
+        $sec = uc($self->getSection($param));
+        # Less than 5 results? Return the results number
+        if ($rows < 5) {
+            my $result = $rows > 1 ? "groups": "group";
+            $self->sendMessage($nick, "Top ".BOLD.UNDERLINE.$rows.NORMAL." ".$result." for ".$sec);
+        } else {
+            $self->sendMessage($nick, "Top 5 groups for ".$sec);
+        }
+
+        # Return placement
+        my $i = 0;
+        while ($i < $rows) {
+            my ($group_count, $group) = $query->fetchrow();
+            # 1. GROUP - 12345 rls
+            $self->sendMessage($nick, GREY.($i+1).".".ORANGE." ".$group.NORMAL." - ".GREEN.$group_count.NORMAL." rls");
+            $i++; 
+        }
+    } else {
+        $self->sendMessage($nick, BOLD."Sorry!".NORMAL." Found no ranking for '".BOLD.UNDERLINE.$param.NORMAL."'");
     }
 
     # Finish query

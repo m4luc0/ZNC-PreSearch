@@ -77,12 +77,12 @@ wget https://raw.githubusercontent.com/m4luc0/ZNC-PreSearch/master/PreSearch.pm
 ## TO-DO
 ```
 !info group - group stats
-!top section - best groups of a section
-!top - best groups - all-time
 !stats - extended db stats
 !db - short db stats
 !today, !week, !month, !year - db stats for a certain period
 ```
+Check the [changelog](https://github.com/m4luc0/ZNC-PreSearch/blob/master/CHANGELOG.md) for new features or changes.
+
 ## Support
 If you need support on any issue about ZNC just say hello at the **#znc** channel on [freenode](https://webchat.freenode.net/). I'll be there too, you can drop me a line if you need specific help for this module.
 
