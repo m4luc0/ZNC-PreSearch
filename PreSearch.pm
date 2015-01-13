@@ -1,7 +1,7 @@
 ##
 # PreSearch module for ZNC IRC Bouncer
 # Author: m4luc0
-# Version: 1.1
+# Version: 1.2
 ##
 
 package PreSearch;
@@ -96,10 +96,18 @@ sub OnPrivMsg {
                 $self->topSectionGroups($nick, $1);
             }
 
+        # !day, !today, !week, !month, !year
+        } elsif ($cmd ~~ m/!day|!today|!week|!month|!year/i) {
+            # Get stats by time period
+            $self->periodStats($nick, $cmd);
+
+        # !db
+        } elsif ($cmd eq "!db") {
+            # Get short DB stats
+            $self->shortStats($nick);
+
         # !help
         } elsif($cmd eq "!help") {
-            $match = $message ~~ m/^!\w+\s(\w.*)/;
-
             # Search foo pre
             $self->searchHelp($nick);
         }
@@ -423,7 +431,7 @@ sub topGroups {
         while ($i < $rows) {
             my ($group_count, $group) = $query->fetchrow();
             # 1. GROUP - 12345 rls
-            $self->sendMessage($nick, GREY.($i+1).".".ORANGE." ".$group.NORMAL." - ".GREEN.$group_count.NORMAL." rls");
+            $self->sendMessage($nick, GREY.($i+1).".".ORANGE." ".$group.NORMAL." - ".$group_count.NORMAL." rls");
             $i++; 
         }
     } else {    
@@ -476,11 +484,162 @@ sub topSectionGroups {
         while ($i < $rows) {
             my ($group_count, $group) = $query->fetchrow();
             # 1. GROUP - 12345 rls
-            $self->sendMessage($nick, GREY.($i+1).".".ORANGE." ".$group.NORMAL." - ".GREEN.$group_count.NORMAL." rls");
+            $self->sendMessage($nick, GREY.($i+1).".".ORANGE." ".$group.NORMAL." - ".$group_count.NORMAL." rls");
             $i++; 
         }
     } else {
         $self->sendMessage($nick, BOLD."Sorry!".NORMAL." Found no ranking for '".BOLD.UNDERLINE.$param.NORMAL."'");
+    }
+
+    # Finish query
+    $query->finish();
+
+    # Disconnect Database
+    $dbh->disconnect();
+}
+
+##
+# !db
+# !day, !today, !week, !month, !year
+##
+
+# Short DB stats
+# Param (nick)
+sub shortStats {
+    my $self = shift;
+    my $nick = $_[0];
+
+    $self->sendMessage($nick, BOLD."Short PreDB stats".NORMAL);
+
+    # Connect to Database
+    my $dbh = DBI->connect("DBI:mysql:database=$DB_NAME;host=$DB_HOST", $DB_USER, $DB_PASSWD)
+        or die "Couldn't connect to database: " . DBI->errstr;
+
+    # 0. PRE
+    my $query = $dbh->prepare("
+        SELECT COUNT(*) FROM `".$DB_TABLE."` WHERE `".$COL_STATUS."` = '0'
+        UNION
+        SELECT COUNT(*) FROM `".$DB_TABLE."` WHERE `".$COL_STATUS."` = '1'
+        UNION
+        SELECT COUNT(*) FROM `".$DB_TABLE."` WHERE `".$COL_STATUS."` = '2'
+        UNION
+        SELECT COUNT(*) FROM `".$DB_TABLE."` WHERE `".$COL_STATUS."` = '3'
+        UNION
+        SELECT COUNT(*) FROM `".$DB_TABLE."` WHERE `".$COL_STATUS."` = '4';");
+    $query->execute() or die $dbh->errstr;
+    my $count = $query->fetchrow();
+    $self->sendMessage($nick, GREEN."PRED: ".NORMAL.$count);
+
+    # 1. NUKED
+    $count = $query->fetchrow();
+    $self->sendMessage($nick, RED."NUKED: ".NORMAL.$count);
+
+    # 2, UNNUKED
+    $count = $query->fetchrow();
+    $self->sendMessage($nick, ORANGE."UNNUKED: ".NORMAL.$count);
+
+    # 3. DELPRED
+    $count = $query->fetchrow();
+    $self->sendMessage($nick, RED."DEL: ".NORMAL.$count);
+
+    # 4. UNDELPRED
+    $count = $query->fetchrow();
+    $self->sendMessage($nick, ORANGE."UNDEL: ".NORMAL.$count);
+
+    # FILES + SIZE
+    $query = $dbh->prepare("SELECT SUM(".$COL_FILES."), SUM(".$COL_SIZE.") FROM `".$DB_TABLE."`;");
+    $query->execute() or die $dbh->errstr;
+    my ($files, $size) = $query->fetchrow();
+    $size = $self->getSize($size);
+    $self->sendMessage($nick, $files.ORANGE."FILES".NORMAL." - ".$size);
+
+    # Finish query
+    $query->finish();
+
+    # Disconnect Database
+    $dbh->disconnect();
+}
+
+# Return stats of given time period: day, week, month, year
+# Param (nick, period)
+sub periodStats {
+    my $self = shift;
+    my ($nick, $period) = @_;
+    my $diff;
+    my $now = time();
+
+    # Get time period
+    if ($period ~~ m/!day|!today/i) {
+        $diff = $now - 86400;
+        $period = "Today's";
+    } elsif ($period eq "!week") {
+        $diff = $now - 604800;
+        $period = "Weekly";
+    } elsif ($period eq "!month") {
+        $diff = $now - 2628000;
+        $period = "Monthly";
+    } elsif ($period eq "!year") {
+        $diff = $now - 31536000;
+        $period = "Yearly";
+    }
+
+    # Connect to Database
+    my $dbh = DBI->connect("DBI:mysql:database=$DB_NAME;host=$DB_HOST", $DB_USER, $DB_PASSWD)
+        or die "Couldn't connect to database: " . DBI->errstr;
+
+    # Prepare Query -> Get stats by time period
+    my $query = $dbh->prepare("
+        SELECT COUNT(*), SUM(`".$COL_FILES."`), SUM(`".$COL_SIZE."`) FROM `".$DB_TABLE."` WHERE `".$COL_STATUS."` = '0' AND `".$COL_PRETIME."` >= '".$diff."' AND `".$COL_PRETIME."` <= '".$now."'
+        UNION
+        SELECT COUNT(*), SUM(`".$COL_FILES."`), SUM(`".$COL_SIZE."`) FROM `".$DB_TABLE."` WHERE `".$COL_STATUS."` = '1' AND `".$COL_PRETIME."` >= '".$diff."' AND `".$COL_PRETIME."` <= '".$now."'
+        UNION
+        SELECT COUNT(*), SUM(`".$COL_FILES."`), SUM(`".$COL_SIZE."`) FROM `".$DB_TABLE."` WHERE `".$COL_STATUS."` = '2' AND `".$COL_PRETIME."` >= '".$diff."' AND `".$COL_PRETIME."` <= '".$now."'
+        UNION
+        SELECT COUNT(*), SUM(`".$COL_FILES."`), SUM(`".$COL_SIZE."`) FROM `".$DB_TABLE."` WHERE `".$COL_STATUS."` = '3' AND `".$COL_PRETIME."` >= '".$diff."' AND `".$COL_PRETIME."` <= '".$now."'
+        UNION
+        SELECT COUNT(*), SUM(`".$COL_FILES."`), SUM(`".$COL_SIZE."`) FROM `".$DB_TABLE."` WHERE `".$COL_STATUS."` = '4' AND `".$COL_PRETIME."` >= '".$diff."' AND `".$COL_PRETIME."` <= '".$now."';");
+
+    # Execute Query
+    $query->execute() or die $dbh->errstr;
+
+    # Get rows
+    my $rows = $query->rows();
+    # Do we have results?
+    if ($rows > 0) {
+        $self->sendMessage($nick, BOLD.$period.NORMAL." stats");
+
+        # PRE
+        my ($count, $files, $size) = $query->fetchrow();
+        $size = (defined $size and $size > 0) ? $self->getSize($size) : "0".ORANGE."MB";
+        $files = defined $files ? $files.ORANGE."F" : "0".ORANGE."F";
+        $self->sendMessage($nick, GREEN.BOLD."PRE: ".NORMAL.$count.GREY." (".NORMAL.$files.GREY." / ".NORMAL.$size.GREY.")");
+
+        # NUKE
+        ($count, $files, $size) = $query->fetchrow();
+        $size = (defined $size and $size > 0) ? $self->getSize($size) : "0".ORANGE."MB";
+        $files = defined $files ? $files.ORANGE."F" : "0".ORANGE."F";
+        $self->sendMessage($nick, RED.BOLD."NUKE: ".NORMAL.$count.GREY." (".NORMAL.$files.GREY." / ".NORMAL.$size.GREY.")");
+
+        # UNNUKE
+        ($count, $files, $size) = $query->fetchrow();
+        $size = (defined $size and $size > 0) ? $self->getSize($size) : "0".ORANGE."MB";
+        $files = defined $files ? $files.ORANGE."F" : "0".ORANGE."F";
+        $self->sendMessage($nick, ORANGE.BOLD."UNNUKE: ".NORMAL.$count.GREY." (".NORMAL.$files.GREY." / ".NORMAL.$size.GREY.")");
+
+        # UNNUKE
+        ($count, $files, $size) = $query->fetchrow();
+        $size = (defined $size and $size > 0) ? $self->getSize($size) : "0".ORANGE."MB";
+        $files = defined $files ? $files.ORANGE."F" : "0".ORANGE."F";
+        $self->sendMessage($nick, RED.BOLD."DEL: ".NORMAL.$count.GREY." (".NORMAL.$files.GREY." / ".NORMAL.$size.GREY.")");
+
+        # UNNUKE
+        ($count, $files, $size) = $query->fetchrow();
+        $size = (defined $size and $size > 0) ? $self->getSize($size) : "0".ORANGE."MB";
+        $files = defined $files ? $files.ORANGE."F" : "0".ORANGE."F";
+        $self->sendMessage($nick, ORANGE.BOLD."UNDEL: ".NORMAL.$count.GREY." (".NORMAL.$files.GREY." / ".NORMAL.$size.GREY.")");
+
+    } else  {
+        $self->sendMessage($nick, BOLD."Sorry!".NORMAL." Found no ".UNDERLINE.$period.NORMAL." stats.");
     }
 
     # Finish query
@@ -513,6 +672,30 @@ sub getType {
     } 
 
     return $color.NORMAL;
+}
+
+# Formats the size to a smaller String.
+# Param (size)
+sub getSize {
+    my $self = shift;
+    my $size = $_[0];
+
+    # format the size
+    if ($size >= 1073741824) {
+        $size = sprintf "%.2f", ($size / 1073741824);
+        return $size.ORANGE."PB".NORMAL;
+    } elsif ($size >= 1048576) {
+        $size = sprintf "%.2f", ($size / 1048576);
+        return $size.ORANGE."TB".NORMAL;
+    } elsif ($size > 1024) {
+        $size = sprintf "%.2f", ($size / 1024);
+        return $size.ORANGE."GB".NORMAL;
+    } elsif ($size < 1 and $size > 0) {
+        $size = sprintf "%.2f", ($size * 1024);
+        return $size.ORANGE."KB".NORMAL;
+    } else {
+        return $size.ORANGE."MB".NORMAL;
+    }
 }
 
 # Return the section with a color
@@ -627,25 +810,21 @@ sub searchHelp {
     # !pre release
     $self->sendMessage($nick, ORANGE.BOLD."!pre".NORMAL." release.name-group ".GREY."//".NORMAL." Search for specific release");
     # !dupe release
-    $self->sendMessage($nick, ORANGE.BOLD."!dupe".NORMAL." release.name-group OR ".ORANGE.BOLD."!dupe ".NORMAL."bla bla bla ".GREY."//".NORMAL." Search for dupes");
+    $self->sendMessage($nick, ORANGE.BOLD."!dupe".NORMAL." release.name-group OR ".ORANGE.BOLD."!dupe".NORMAL." bla bla bla ".GREY."//".NORMAL." Search for dupes");
     # !grp group
     $self->sendMessage($nick, ORANGE.BOLD."!grp".NORMAL." groupname ".GREY."//".NORMAL." Last 5 group releases");
-    # !info group
-    #$self->sendMessage($nick, ORANGE.BOLD."!info".NORMAL." groupname ".GREY."//".NORMAL." Group stats");
     # !new section
     $self->sendMessage($nick, ORANGE.BOLD."!new".NORMAL." section ".GREY."//".NORMAL." Last 10 section releases");
     # !top
-    #$self->sendMessage($nick, ORANGE.BOLD."!top ".NORMAL.GREY."//".NORMAL." All-time Top 10 groups");
+    $self->sendMessage($nick, ORANGE.BOLD."!top".NORMAL.GREY." // ".NORMAL."All-time Top 10 groups");
     # !top section
-    #$self->sendMessage($nick, ORANGE.BOLD."!top".NORMAL." section ".GREY."//".NORMAL." Top 5 groups of a section");
+    $self->sendMessage($nick, ORANGE.BOLD."!top".NORMAL." section ".GREY."//".NORMAL." Top 5 groups of a section");
     # !today, !week, !month, !year
-    #$self->sendMessage($nick, ORANGE.BOLD."!today, !week, !month, !year ".GREY."//".NORMAL." Stats for a specific time period");
-    # !stats
-    #$self->sendMessage($nick, ORANGE.BOLD."!stats ".GREY."//".NORMAL." Extended DB stats");
+    $self->sendMessage($nick, ORANGE.BOLD."!day/!today".NORMAL.", ".ORANGE.BOLD."!week".NORMAL.", ".ORANGE.BOLD."!month".NORMAL.", ".ORANGE.BOLD."!year".NORMAL.GREY." // ".NORMAL."Stats for a specific time period");
     # !db
-    #$self->sendMessage($nick, ORANGE.BOLD."!db ".GREY."//".NORMAL." Short DB stats");
+    $self->sendMessage($nick, ORANGE.BOLD."!db".NORMAL.GREY." // ".NORMAL."Short DB stats");
     # !help
-    $self->sendMessage($nick, ORANGE.BOLD."!help ".GREY."//".NORMAL." Known commands");
+    $self->sendMessage($nick, ORANGE.BOLD."!help".NORMAL.GREY." // ".NORMAL."Known commands");
 }
 
 ##

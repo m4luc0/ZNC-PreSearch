@@ -4,7 +4,7 @@ This is a PreSearch module for the [ZNC IRC Bouncer](http://znc.in/) written in 
 Are you already running a PreBot? If not, just take a look at the [ZNC PreBot module](https://github.com/m4luc0/ZNC-PreBot/). This module extends your bnc with the capability of specific Pre searches. Just grab the module, edit the MySQL DB settings and start being a PreSearch Bot.
 
 ##How does it work?
-The module checks your private messages for "Pre" commands like **!pre, !dupe, !new, !grp, etc**. If it's a command the module will return the results from your PreDB as a private irc message. The module offers some MySQL configuration variables. It will allow you to use your own db structure and column names.
+The module checks your private messages for "Pre" commands like **!pre, !dupe, !new, !grp, etc**. If it's a command the module will return the results from your PreDB as a private irc message to the sender. The module offers some MySQL configuration variables. It will allow you to use your own db structure and column names.
 
 ```
 < Known commands: >
@@ -12,6 +12,10 @@ The module checks your private messages for "Pre" commands like **!pre, !dupe, !
 < !dupe release.name-group OR !dupe bla bla bla // Search for dupes >
 < !grp groupname // Last 5 group releases >
 < !new section // Last 10 section releases >
+< !top // All-time Top 10 groups >
+< !top section // Top 5 groups of a section >
+< !today, !week, !month, !year // Stats for a specific time period >
+< !db // Short DB stats >
 < !help // Known commands >
 ```
 
@@ -78,8 +82,9 @@ wget https://raw.githubusercontent.com/m4luc0/ZNC-PreSearch/master/PreSearch.pm
 ```
 !info group - group stats
 !stats - extended db stats
-!db - short db stats
-!today, !week, !month, !year - db stats for a certain period
+!nuke - last nukes
+!nuke group - last group nukes
+
 ```
 Check the [changelog](https://github.com/m4luc0/ZNC-PreSearch/blob/master/CHANGELOG.md) for new features or changes.
 
