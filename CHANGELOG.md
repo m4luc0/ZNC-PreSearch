@@ -1,3 +1,10 @@
+## 1.3 (14.01.2015)
+
+Features:
+
+* added **!stats group** - group stats
+* added **db_schema.sql** - PreDB schema
+
 ## 1.2 (13.01.2015)
 
 Features:
