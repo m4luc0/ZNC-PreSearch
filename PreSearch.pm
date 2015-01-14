@@ -101,6 +101,18 @@ sub OnPrivMsg {
             # Get stats by time period
             $self->periodStats($nick, $cmd);
 
+        # !stats (group)
+        } elsif ($cmd eq "!stats") {
+            $match = $message ~~ m/^!\w+\s(.*)/;
+
+            # Get extended DB stats
+            if (!$match) {
+                #$self->topGroups($nick);
+            # Get group stats
+            } else {
+                $self->groupStats($nick, $1);
+            }
+
         # !db
         } elsif ($cmd eq "!db") {
             # Get short DB stats
@@ -258,7 +270,6 @@ sub searchDupe {
 sub group {
     my $self = shift;
     my ($nick, $param) = @_;
-    my $group = "%".$param."%";
     my $result;
 
     # Connect to Database
@@ -269,7 +280,7 @@ sub group {
     my $query = $dbh->prepare("SELECT * FROM  `".$DB_TABLE."` WHERE LOWER(`".$COL_GROUP."`) LIKE LOWER( ? ) ORDER BY `".$COL_PRETIME."` DESC LIMIT 0, 10;");
 
     # Execute Query
-    $query->execute($group) or die $dbh->errstr;
+    $query->execute($param) or die $dbh->errstr;
 
     # Get rows
     my $rows = $query->rows();
@@ -641,6 +652,295 @@ sub periodStats {
     } else  {
         $self->sendMessage($nick, BOLD."Sorry!".NORMAL." Found no ".UNDERLINE.$period.NORMAL." stats.");
     }
+
+    # Finish query
+    $query->finish();
+
+    # Disconnect Database
+    $dbh->disconnect();
+}
+
+# Return group stats
+# Param (nick, group)
+sub groupStats {
+    my $self = shift;
+    my ($nick, $param) = @_;
+
+    # Connect to Database
+    my $dbh = DBI->connect("DBI:mysql:database=$DB_NAME;host=$DB_HOST", $DB_USER, $DB_PASSWD)
+        or die "Couldn't connect to database: " . DBI->errstr;
+
+    # ALL RELEASES (FILES - SIZE) 
+    my $query = $dbh->prepare("SELECT `".$COL_GROUP."`, COUNT(*), SUM(`".$COL_FILES."`), SUM(`".$COL_SIZE."`) FROM `".$DB_TABLE."` WHERE LOWER(`".$COL_GROUP."`) LIKE LOWER( ? );");
+    $query->execute($param) or die $dbh->errstr;
+
+    # Get rows
+    my $rows = $query->rows();
+
+    # Get results
+    my ($group, $count, $files, $size) = $query->fetchrow();
+
+    # set some stats variables
+    my $releases = $count;  # set number of all rls
+    my $fine = 0;           # number for fine rls
+    my $nuked = 0;          # number for nuked rls
+
+    if ($rows > 0) {
+        $self->sendMessage($nick, "Groupstats for '".ORANGE.$group.NORMAL."'");
+
+        # ALL RLS
+        $size = (defined $size and $size > 0) ? $self->getSize($size) : "0".ORANGE."MB";
+        $files = defined $files ? $files.ORANGE."F" : "0".ORANGE."F";
+        $self->sendMessage($nick, BOLD."PRED: ".NORMAL.ORANGE.$count.GREY." (".NORMAL.$files.GREY." / ".NORMAL.$size.GREY.")");
+
+        # FINE
+        $query = $dbh->prepare("SELECT COUNT(*), SUM(`".$COL_FILES."`), SUM(`".$COL_SIZE."`) FROM `".$DB_TABLE."` WHERE LOWER(`".$COL_GROUP."`) LIKE LOWER( ? ) AND `".$COL_STATUS."` = '0';");
+        $query->execute($param) or die $dbh->errstr;
+        ($count, $files, $size) = $query->fetchrow();
+        $fine = $count; # set number of fine releases
+        $size = (defined $size and $size > 0) ? $self->getSize($size) : "0".ORANGE."MB";
+        $files = defined $files ? $files.ORANGE."F" : "0".ORANGE."F";
+        $self->sendMessage($nick, BOLD."FINE: ".NORMAL.ORANGE.$count.GREY." (".NORMAL.$files.GREY." / ".NORMAL.$size.GREY.")");
+
+        # IF NOT ALL RELEASES ARE FINE
+        if ($releases != $fine) {
+            # PROPER
+            $query = $dbh->prepare("SELECT COUNT(*), SUM(`".$COL_FILES."`), SUM(`".$COL_SIZE."`) FROM `".$DB_TABLE."` WHERE LOWER(`".$COL_GROUP."`) LIKE LOWER( ? ) AND LOWER(`".$COL_RELEASE."`) LIKE LOWER('%proper%') AND `".$COL_STATUS."` LIKE '0';");
+            $query->execute($param) or die $dbh->errstr;
+            ($count, $files, $size) = $query->fetchrow();
+            if ($count > 0) {
+                ($count, $files, $size) = $query->fetchrow();
+                $size = (defined $size and $size > 0) ? $self->getSize($size) : "0".ORANGE."MB";
+                $files = defined $files ? $files.ORANGE."F" : "0".ORANGE."F";
+                $self->sendMessage($nick, BOLD."PROPER: ".NORMAL.ORANGE.$count.GREY." (".NORMAL.$files.GREY." / ".NORMAL.$size.GREY.")");
+            }
+
+            # INTERNAL
+            $query = $dbh->prepare("SELECT COUNT(*), SUM(`".$COL_FILES."`), SUM(`".$COL_SIZE."`) FROM `".$DB_TABLE."` WHERE LOWER(`".$COL_GROUP."`) LIKE LOWER( ? ) AND LOWER(`".$COL_RELEASE."`) LIKE LOWER('%internal%') AND `".$COL_STATUS."` LIKE '0';");
+            $query->execute($param) or die $dbh->errstr;
+            ($count, $files, $size) = $query->fetchrow();
+            if ($count > 0) {
+                ($count, $files, $size) = $query->fetchrow();
+                $size = (defined $size and $size > 0) ? $self->getSize($size) : "0".ORANGE."MB";
+                $files = defined $files ? $files.ORANGE."F" : "0".ORANGE."F";
+                $self->sendMessage($nick, BOLD."INTERNALS: ".NORMAL.ORANGE.$count.GREY." (".NORMAL.$files.GREY." / ".NORMAL.$size.GREY.")");
+            }
+
+            # REPACKS
+            $query = $dbh->prepare("SELECT COUNT(*), SUM(`".$COL_FILES."`), SUM(`".$COL_SIZE."`) FROM `".$DB_TABLE."` WHERE LOWER(`".$COL_GROUP."`) LIKE LOWER( ? ) AND LOWER(`".$COL_RELEASE."`) LIKE LOWER('%repack%') AND `".$COL_STATUS."` LIKE '0';");
+            $query->execute($param) or die $dbh->errstr;
+            ($count, $files, $size) = $query->fetchrow();
+            if ($count > 0) {
+                ($count, $files, $size) = $query->fetchrow();
+                $size = (defined $size and $size > 0) ? $self->getSize($size) : "0".ORANGE."MB";
+                $files = defined $files ? $files.ORANGE."F" : "0".ORANGE."F";
+                $self->sendMessage($nick, BOLD."REPACKS: ".NORMAL.ORANGE.$count.GREY." (".NORMAL.$files.GREY." / ".NORMAL.$size.GREY.")");
+            }
+
+            # FIXED
+            $query = $dbh->prepare("SELECT COUNT(*), SUM(`".$COL_FILES."`), SUM(`".$COL_SIZE."`) FROM `".$DB_TABLE."` WHERE LOWER(`".$COL_GROUP."`) LIKE LOWER( ? ) AND LOWER(`".$COL_RELEASE."`) LIKE LOWER('%fix%') AND `".$COL_STATUS."` LIKE '0';");
+            $query->execute($param) or die $dbh->errstr;
+            ($count, $files, $size) = $query->fetchrow();
+            if ($count > 0) {
+                $size = (defined $size and $size > 0) ? $self->getSize($size) : "0".ORANGE."MB";
+                $files = defined $files ? $files.ORANGE."F" : "0".ORANGE."F";
+                $self->sendMessage($nick, BOLD."FIXES: ".NORMAL.ORANGE.$count.GREY." (".NORMAL.$files.GREY." / ".NORMAL.$size.GREY.")");
+            }
+
+            # NUKED
+            $query = $dbh->prepare("SELECT COUNT(*), SUM(`".$COL_FILES."`), SUM(`".$COL_SIZE."`) FROM `".$DB_TABLE."` WHERE LOWER(`".$COL_GROUP."`) LIKE LOWER( ? ) AND `".$COL_STATUS."` LIKE '1';");
+            $query->execute($param) or die $dbh->errstr;
+            ($count, $files, $size) = $query->fetchrow();
+            if ($count > 0) {
+                $nuked = $count; # set number of nukes
+                $size = (defined $size and $size > 0) ? $self->getSize($size) : "0".ORANGE."MB";
+                $files = defined $files ? $files.ORANGE."F" : "0".ORANGE."F";
+                $self->sendMessage($nick, BOLD.RED."NUKED: ".NORMAL.ORANGE.$count.GREY." (".NORMAL.$files.GREY." / ".NORMAL.$size.GREY.")");
+            }
+
+            # UNNUKED
+            $query = $dbh->prepare("SELECT COUNT(*), SUM(`".$COL_FILES."`), SUM(`".$COL_SIZE."`) FROM `".$DB_TABLE."` WHERE LOWER(`".$COL_GROUP."`) LIKE LOWER( ? ) AND `".$COL_STATUS."` LIKE '2';");
+            $query->execute($param) or die $dbh->errstr;
+            ($count, $files, $size) = $query->fetchrow();
+            if ($count > 0) {
+                $size = (defined $size and $size > 0) ? $self->getSize($size) : "0".ORANGE."MB";
+                $files = defined $files ? $files.ORANGE."F" : "0".ORANGE."F";
+                $self->sendMessage($nick, BOLD.GREEN."UNNUKED: ".NORMAL.ORANGE.$count.GREY." (".NORMAL.$files.GREY." / ".NORMAL.$size.GREY.")");
+            }
+
+            # DELETED
+            $query = $dbh->prepare("SELECT COUNT(*), SUM(`".$COL_FILES."`), SUM(`".$COL_SIZE."`) FROM `".$DB_TABLE."` WHERE LOWER(`".$COL_GROUP."`) LIKE LOWER( ? ) AND `".$COL_STATUS."` LIKE '3';");
+            $query->execute($param) or die $dbh->errstr;
+            ($count, $files, $size) = $query->fetchrow();
+            if ($count > 0) {
+                $size = (defined $size and $size > 0) ? $self->getSize($size) : "0".ORANGE."MB";
+                $files = defined $files ? $files.ORANGE."F" : "0".ORANGE."F";
+                $self->sendMessage($nick, BOLD.RED."DELETED: ".NORMAL.ORANGE.$count.GREY." (".NORMAL.$files.GREY." / ".NORMAL.$size.GREY.")");
+            }
+
+            # UNDELETED
+            $query = $dbh->prepare("SELECT COUNT(*), SUM(`".$COL_FILES."`), SUM(`".$COL_SIZE."`) FROM `".$DB_TABLE."` WHERE LOWER(`".$COL_GROUP."`) LIKE LOWER( ? ) AND `".$COL_STATUS."` LIKE '4';");
+            $query->execute($param) or die $dbh->errstr;
+            ($count, $files, $size) = $query->fetchrow();
+            if ($count > 0) {
+                $size = (defined $size and $size > 0) ? $self->getSize($size) : "0".ORANGE."MB";
+                $files = defined $files ? $files.ORANGE."F" : "0".ORANGE."F";
+                $self->sendMessage($nick, BOLD.GREEN."UNDELETED: ".NORMAL.ORANGE.$count.GREY." (".NORMAL.$files.GREY." / ".NORMAL.$size.GREY.")");
+            }
+        }
+
+        # STATS BY TIME PERIOD
+        my $now = time();
+        # TODAY
+        my $period = $now - 86400;
+        $query = $dbh->prepare("SELECT COUNT(*), SUM(`".$COL_FILES."`), SUM(`".$COL_SIZE."`) FROM `".$DB_TABLE."` WHERE LOWER(`".$COL_GROUP."`) LIKE LOWER( ? ) AND `".$COL_PRETIME."` >= '".$period."' AND `".$COL_PRETIME."` <= '".$now."';");
+        $query->execute($param) or die $dbh->errstr;
+        ($count, $files, $size) = $query->fetchrow();
+        $size = (defined $size and $size > 0) ? $self->getSize($size) : "0".ORANGE."MB";
+        $files = defined $files ? $files.ORANGE."F" : "0".ORANGE."F";
+        $self->sendMessage($nick, BOLD."RLS TODAY: ".NORMAL.ORANGE.$count.GREY." (".NORMAL.$files.GREY." / ".NORMAL.$size.GREY.")");
+
+        # WEEK
+        $period = $now - 604800;
+        $query = $dbh->prepare("SELECT COUNT(*), SUM(`".$COL_FILES."`), SUM(`".$COL_SIZE."`) FROM `".$DB_TABLE."` WHERE LOWER(`".$COL_GROUP."`) LIKE LOWER( ? ) AND `".$COL_PRETIME."` >= '".$period."' AND `".$COL_PRETIME."` <= '".$now."';");
+        $query->execute($param) or die $dbh->errstr;
+        ($count, $files, $size) = $query->fetchrow();
+        $size = (defined $size and $size > 0) ? $self->getSize($size) : "0".ORANGE."MB";
+        $files = defined $files ? $files.ORANGE."F" : "0".ORANGE."F";
+        $self->sendMessage($nick, BOLD."WEEK: ".NORMAL.ORANGE.$count.GREY." (".NORMAL.$files.GREY." / ".NORMAL.$size.GREY.")");
+
+        # MONTH
+        $period = $now - 2628000;
+        $query = $dbh->prepare("SELECT COUNT(*), SUM(`".$COL_FILES."`), SUM(`".$COL_SIZE."`) FROM `".$DB_TABLE."` WHERE LOWER(`".$COL_GROUP."`) LIKE LOWER( ? ) AND `".$COL_PRETIME."` >= '".$period."' AND `".$COL_PRETIME."` <= '".$now."';");
+        $query->execute($param) or die $dbh->errstr;
+        ($count, $files, $size) = $query->fetchrow();
+        $size = (defined $size and $size > 0) ? $self->getSize($size) : "0".ORANGE."MB";
+        $files = defined $files ? $files.ORANGE."F" : "0".ORANGE."F";
+        $self->sendMessage($nick, BOLD."MONTH: ".NORMAL.ORANGE.$count.GREY." (".NORMAL.$files.GREY." / ".NORMAL.$size.GREY.")");
+
+        # YEAR
+        $period = $now - 31536000;
+        $query = $dbh->prepare("SELECT COUNT(*), SUM(`".$COL_FILES."`), SUM(`".$COL_SIZE."`) FROM `".$DB_TABLE."` WHERE LOWER(`".$COL_GROUP."`) LIKE LOWER( ? ) AND `".$COL_PRETIME."` >= '".$period."' AND `".$COL_PRETIME."` <= '".$now."';");
+        $query->execute($param) or die $dbh->errstr;
+        ($count, $files, $size) = $query->fetchrow();
+        $size = (defined $size and $size > 0) ? $self->getSize($size) : "0".ORANGE."MB";
+        $files = defined $files ? $files.ORANGE."F" : "0".ORANGE."F";
+        $self->sendMessage($nick, BOLD."YEAR: ".NORMAL.ORANGE.$count.GREY." (".NORMAL.$files.GREY." / ".NORMAL.$size.GREY.")");
+
+        # FIRST RELEASE
+        $query = $dbh->prepare("SELECT * FROM `".$DB_TABLE."` WHERE LOWER(`".$COL_GROUP."`) LIKE LOWER( ? ) ORDER BY `".$COL_PRETIME."` ASC LIMIT 1;");
+        $query->execute($param) or die $dbh->errstr;
+
+            # Set variables
+            my ($id, $pretime, $pre, $section, $file, $sizes, $status, $reason, $group) = $query->fetchrow();
+            $pretime = $self->get_time_since($pretime);
+            $section = $self->getSection($section);
+            $sizes = $self->getSize($sizes);
+
+            # SECTION + RELEASE
+            my $result = $section." ".$pre." ".$pretime;
+
+            # FILES + SIZE?
+            if ($file > 0 or $sizes > 0.00) {
+                $result .= GREY." - [".NORMAL.$file.ORANGE."F".NORMAL." - ".$sizes.GREY."] ".NORMAL;
+            }
+
+            # NUKED or DEL?
+            if ($status eq 1 or $status eq 3) {
+                $status = $self->getType($status);
+                $result .= " - ".$status.RED.": ".$reason;
+            }
+
+            # Return result
+            $self->sendMessage($nick, BOLD.GREEN."FIRST PRE: ".NORMAL.$result);
+
+        # LAST RELEASE
+        $query = $dbh->prepare("SELECT * FROM `".$DB_TABLE."` WHERE LOWER(`".$COL_GROUP."`) LIKE LOWER( ? ) ORDER BY `".$COL_PRETIME."` DESC LIMIT 1;");
+        $query->execute($param) or die $dbh->errstr;
+
+            # Set variables
+            ($id, $pretime, $pre, $section, $file, $sizes, $status, $reason, $group) = $query->fetchrow();
+            $pretime = $self->get_time_since($pretime);
+            $section = $self->getSection($section);
+            $sizes = $self->getSize($sizes);
+
+            # SECTION + RELEASE
+            $result = $section." ".$pre." ".$pretime;
+
+            # FILES + SIZE?
+            if ($file > 0 or $sizes > 0.00) {
+                $result .= GREY." - [".NORMAL.$file.ORANGE."F".NORMAL." - ".$sizes.GREY."] ".NORMAL;
+            }
+
+            # NUKED or DEL?
+            if ($status eq 1 or $status eq 3) {
+                $status = $self->getType($status);
+                $result .= " - ".$status.RED.": ".$reason;
+            }
+
+            # Return result
+            $self->sendMessage($nick, BOLD.GREEN."LAST PRE: ".NORMAL.$result);
+
+        if ($nuked > 0) {
+            # FIRST NUKE
+            $query = $dbh->prepare("SELECT * FROM `".$DB_TABLE."` WHERE LOWER(`".$COL_GROUP."`) LIKE LOWER( ? ) AND `".$COL_STATUS."` = '1' ORDER BY `".$COL_PRETIME."` ASC LIMIT 1;");
+            $query->execute($param) or die $dbh->errstr;
+
+                # Set variables
+                ($id, $pretime, $pre, $section, $file, $sizes, $status, $reason, $group) = $query->fetchrow();
+                $pretime = $self->get_time_since($pretime);
+                $section = $self->getSection($section);
+                $sizes = $self->getSize($sizes);
+
+                # SECTION + RELEASE
+                $result = $section." ".$pre." ".$pretime;
+
+                # FILES + SIZE?
+                if ($file > 0 or $sizes > 0.00) {
+                    $result .= GREY." - [".NORMAL.$file.ORANGE."F".NORMAL." - ".$sizes.GREY."] ".NORMAL;
+                }
+
+                # NUKED or DEL?
+                if ($status eq 1 or $status eq 3) {
+                    $status = $self->getType($status);
+                    $result .= " - ".$status.RED.": ".$reason;
+                }
+
+                # Return result
+                $self->sendMessage($nick, BOLD.RED."FIRST NUKE: ".NORMAL.$result);
+
+            # LAST NUKE
+            $query = $dbh->prepare("SELECT * FROM `".$DB_TABLE."` WHERE LOWER(`".$COL_GROUP."`) LIKE LOWER( ? ) AND `".$COL_STATUS."` = '1' ORDER BY `".$COL_PRETIME."` DESC LIMIT 1;");
+            $query->execute($param) or die $dbh->errstr;
+
+                # Set variables
+                ($id, $pretime, $pre, $section, $file, $sizes, $status, $reason, $group) = $query->fetchrow();
+                $pretime = $self->get_time_since($pretime);
+                $section = $self->getSection($section);
+                $sizes = $self->getSize($sizes);
+
+                # SECTION + RELEASE
+                $result = $section." ".$pre." ".$pretime;
+
+                # FILES + SIZE?
+                if ($file > 0 or $sizes > 0.00) {
+                    $result .= GREY." - [".NORMAL.$file.ORANGE."F".NORMAL." - ".$sizes.GREY."] ".NORMAL;
+                }
+
+                # NUKED or DEL?
+                if ($status eq 1 or $status eq 3) {
+                    $status = $self->getType($status);
+                    $result .= " - ".$status.RED.": ".$reason;
+                }
+
+                # Return result
+                $self->sendMessage($nick, BOLD.RED."LAST NUKE: ".NORMAL.$result);
+        }
+    } else  {
+        $self->sendMessage($nick, BOLD."Sorry!".NORMAL." Found no stats for ".UNDERLINE.$param.NORMAL.".");
+    }
+
+    $self->sendMessage($nick, "No more stats for '".ORANGE.$group.NORMAL."'");
 
     # Finish query
     $query->finish();

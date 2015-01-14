@@ -6,18 +6,17 @@ Are you already running a PreBot? If not, just take a look at the [ZNC PreBot mo
 ##How does it work?
 The module checks your private messages for "Pre" commands like **!pre, !dupe, !new, !grp, etc**. If it's a command the module will return the results from your PreDB as a private irc message to the sender. The module offers some MySQL configuration variables. It will allow you to use your own db structure and column names.
 
-```
-< Known commands: >
-< !pre release.name-group // Search for specific release >
-< !dupe release.name-group OR !dupe bla bla bla // Search for dupes >
-< !grp groupname // Last 5 group releases >
-< !new section // Last 10 section releases >
-< !top // All-time Top 10 groups >
-< !top section // Top 5 groups of a section >
-< !today, !week, !month, !year // Stats for a specific time period >
-< !db // Short DB stats >
-< !help // Known commands >
-```
+#### Known commands
+**!pre release.name-group** - *Search for specific release*<br />
+**!dupe release.name-group** OR **!dupe bla bla bla** - *Search for dupes*<br />
+**!grp groupname** - *Last 5 group releases*<br />
+**!new section** - *Last 10 section releases*<br />
+**!top** - *All-time Top 10 groups*<br />
+**!top section** - *Top 5 groups of a section*<br />
+**!today, !week, !month, !year** - *Stats for a specific time period*<br />
+**!stats group** - *Group stats*<br />
+**!db** - *Short DB stats*<br />
+**!help** - *Known commands*
 
 It's pretty simple to use and easy to understand.
 I've tried to comment everything that could be important for a better code understanding,
@@ -28,24 +27,7 @@ so even perl beginners should be able to use and modify it for custom purposes.
 * ZNC installed and running. Don't know how to install it? Take a look at the [official guide](http://wiki.znc.in/Installation).
 * MySQL server running. In case you're using another DB type you'll have to rewrite some code lines.
 * Knowledge about starting Perl modules in ZNC. Don't know how to do that? Take a look at the ZNC [Modperl wiki page](http://wiki.znc.in/Modperl).
-* Last but not least, a non empty PreDB. Your PreDB structure **could** look like this:
-
-```sql
-CREATE TABLE IF NOT EXISTS `releases` (
-  `ID` int(11) unsigned NOT NULL AUTO_INCREMENT,
-  `pretime` int(11) NOT NULL,
-  `release` varchar(200) NOT NULL,
-  `section` varchar(20) NOT NULL,
-  `files` int(5) NOT NULL DEFAULT '0',
-  `size` decimal(10,2) NOT NULL DEFAULT '0.00',
-  `status` int(1) NOT NULL DEFAULT '0',
-  `reason` varchar(255) NOT NULL DEFAULT '',
-  `group` varchar(30) NOT NULL DEFAULT '',
-  PRIMARY KEY (`ID`),
-  UNIQUE KEY `release` (`release`),
-  KEY `grp` (`group`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ;
-```
+* Last but not least, a non empty PreDB. Take a look at the [db_schema](https://github.com/m4luc0/ZNC-PreSearch/blob/master/db_schema.sql) if you're not sure how your PreDB could look like.
 
 ## Installation
 Make sure that you've configured ZNC with the **--enable-perl** flag. Don't know what I'm talking about? Take a look at the ZNC [Modperl wiki page](http://wiki.znc.in/Modperl). Furthermore I assume that your MySQL server is running with a prepared and non empty db, so you just need to install some Perl modules. The best way to install Perl modules is via [cpanm](https://metacpan.org/pod/App::cpanminus). To install the required packages just type the following commands into your shell:
@@ -80,7 +62,6 @@ wget https://raw.githubusercontent.com/m4luc0/ZNC-PreSearch/master/PreSearch.pm
 
 ## TO-DO
 ```
-!info group - group stats
 !stats - extended db stats
 !nuke - last nukes
 !nuke group - last group nukes
