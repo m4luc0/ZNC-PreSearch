@@ -1,3 +1,15 @@
+## 1.4 (15.01.2015)
+
+Features:
+
+* added **!stats** - extended PreDB stats
+* added **!nukes** - Last 10 nukes (by group or section)
+* added **!grp group section** - Last 10 group releases by section
+* added **!cmds** - alternative for !help
+* added **!group** - alternative for !grp
+* added better command explanation with colors
+* minor code improvements
+
 ## 1.3 (14.01.2015)
 
 Features:

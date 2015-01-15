@@ -9,14 +9,16 @@ The module checks your private messages for "Pre" commands like **!pre, !dupe, !
 #### Known commands
 **!pre release.name-group** - *Search for specific release*<br />
 **!dupe release.name-group** OR **!dupe bla bla bla** - *Search for dupes*<br />
-**!grp groupname** - *Last 5 group releases*<br />
+**!grp, !group groupname (section)** - *Last 10 group releases (by section)*<br />
 **!new section** - *Last 10 section releases*<br />
+**!nukes (group/section -g/-s)** - Last 10 nukes (by group/by section)<br />
 **!top** - *All-time Top 10 groups*<br />
 **!top section** - *Top 5 groups of a section*<br />
-**!today, !week, !month, !year** - *Stats for a specific time period*<br />
+**!day, !today, !week, !month, !year** - *Stats for a specific time period*<br />
+**!stats** - *Extended PreDB stats*<br />
 **!stats group** - *Group stats*<br />
-**!db** - *Short DB stats*<br />
-**!help** - *Known commands*
+**!db** - *Short PreDB stats*<br />
+**!help, !cmds** - *Known commands*
 
 It's pretty simple to use and easy to understand.
 I've tried to comment everything that could be important for a better code understanding,
@@ -62,10 +64,7 @@ wget https://raw.githubusercontent.com/m4luc0/ZNC-PreSearch/master/PreSearch.pm
 
 ## TO-DO
 ```
-!stats - extended db stats
-!nuke - last nukes
-!nuke group - last group nukes
-
+Nothing so far!
 ```
 Check the [changelog](https://github.com/m4luc0/ZNC-PreSearch/blob/master/CHANGELOG.md) for new features or changes.
 
