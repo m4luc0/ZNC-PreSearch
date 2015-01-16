@@ -8,7 +8,7 @@ The module checks your private messages for "Pre" commands like **!pre, !dupe, !
 
 #### Known commands
 **!pre release.name-group** - *Search for specific release*<br />
-**!dupe release.name-group** OR **!dupe bla bla bla** - *Search for dupes*<br />
+**!dupe bla bla bla** - *Search for dupes*<br />
 **!grp, !group groupname (section)** - *Last 10 group releases (by section)*<br />
 **!new section** - *Last 10 section releases*<br />
 **!nukes (group/section -g/-s)** - Last 10 nukes (by group/by section)<br />
@@ -62,14 +62,9 @@ wget https://raw.githubusercontent.com/m4luc0/ZNC-PreSearch/master/PreSearch.pm
 /msg *status loadmod PreSearch
 ```
 
-## TO-DO
-```
-Nothing so far!
-```
-Check the [changelog](https://github.com/m4luc0/ZNC-PreSearch/blob/master/CHANGELOG.md) for new features or changes.
-
 ## Support
 If you need support on any issue about ZNC just say hello at the **#znc** channel on [freenode](https://webchat.freenode.net/). I'll be there too, you can drop me a line if you need specific help for this module.
+Check the [changelog](https://github.com/m4luc0/ZNC-PreSearch/blob/master/CHANGELOG.md) for new features or changes.
 
 ## Any suggestions or bugs?
 Have a bug or a feature request? Or you know how I can improve the code quality?
